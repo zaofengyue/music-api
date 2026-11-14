@@ -10,6 +10,21 @@ const API_TOKEN = (process.env.API_TOKEN || '').trim();
 const QQ_COOKIE = process.env.QQ_COOKIE || '';
 const QQ_UIN    = process.env.QQ_UIN || '0';
 const LX_SOURCE_URL = (process.env.LX_SOURCE_URL || '').trim().replace(/\/$/, '');
+const LX_SOURCE_KEY = (process.env.LX_SOURCE_KEY || '').trim(); // 对应请求头 X-Request-Key，没有可留空
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX, 10) || 60; // 每 IP 每分钟请求上限
+
+// 部署在反向代理（Alwaysdata）之后：信任一层代理，用 req.ip 取真实来源，避免直接信任可伪造的 X-Forwarded-For
+app.set('trust proxy', 1);
+
+// 洛雪/第三方常见音质名 -> 本项目音质名
+const LEVEL_ALIAS = { '128k': 'standard', '320k': 'exhigh', 'flac': 'lossless', 'flac24bit': 'lossless' };
+
+const crypto = require('crypto');
+function safeEqual(a, b) {
+    const ha = crypto.createHash('sha256').update(a).digest();
+    const hb = crypto.createHash('sha256').update(b).digest();
+    return crypto.timingSafeEqual(ha, hb);
+}
 
 // ==================== 中间件：跨域设置 ====================
 app.use((req, res, next) => {
@@ -23,7 +38,6 @@ app.use((req, res, next) => {
 // ==================== 中间件：简易防刷限流 (每IP每分钟60次) ====================
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX = 60;
 
 setInterval(() => {
     const now = Date.now();
@@ -32,10 +46,10 @@ setInterval(() => {
             rateLimitMap.delete(ip);
         }
     }
-}, 60 * 1000);
+}, 60 * 1000).unref();
 
 const rateLimiter = (req, res, next) => {
-    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
     const record = rateLimitMap.get(clientIp) || { count: 0, startTime: now };
 
@@ -157,13 +171,16 @@ async function tryLxSource(songmid, requestedLevel) {
 
     try {
         const targetUrl = `${LX_SOURCE_URL}/url/tx/${songmid}/${q}`;
-        const res = await axios.get(targetUrl, {
-            headers: { 'User-Agent': 'LX-Music-API' },
-            timeout: 5000
-        });
-        if (res.data?.url) {
+        const headers = { 'User-Agent': 'LX-Music-API' };
+        if (LX_SOURCE_KEY) headers['X-Request-Key'] = LX_SOURCE_KEY;
+        const res = await axios.get(targetUrl, { headers, timeout: 5000 });
+        const body = res.data;
+        // 通用格式 { code: 0, data: "https://..." }；兼容 code 200 与 data.url / url
+        const okCode = body && (body.code === undefined || body.code === 0 || body.code === 200);
+        const link = typeof body?.data === 'string' ? body.data : (body?.data?.url || body?.url);
+        if (okCode && typeof link === 'string' && /^https?:\/\//i.test(link)) {
             return {
-                url: res.data.url.replace(/^http:\/\//i, 'https://'),
+                url: link.replace(/^http:\/\//i, 'https://'),
                 level: requestedLevel,
                 format: q === 'flac' ? 'flac' : 'mp3',
                 source: 'lx_music'
@@ -229,8 +246,8 @@ async function tryKuwoFallback(keyword, requestedLevel) {
 app.get('/music/qq_song_kw.php', rateLimiter, async (req, res) => {
     // 1. 访问鉴权
     if (API_TOKEN) {
-        const clientToken = (req.headers['x-api-token'] || req.query.token || '').trim();
-        if (clientToken !== API_TOKEN) {
+        const clientToken = String(req.headers['x-api-token'] || req.query.token || '').trim();
+        if (!safeEqual(clientToken, API_TOKEN)) {
             return res.status(401).json({ code: 401, msg: '未授权：Token 无效或缺失' });
         }
     }
@@ -242,7 +259,8 @@ app.get('/music/qq_song_kw.php', rateLimiter, async (req, res) => {
     }
 
     const mediaMid = (req.query.media_mid || '').trim();
-    const requestedLevel = (req.query.level || 'standard').toLowerCase();
+    const rawLevel = (req.query.level || 'standard').toLowerCase();
+    const requestedLevel = LEVEL_ALIAS[rawLevel] || rawLevel;
     const songName = (req.query.name || req.query.title || '').trim();
     const songArtist = (req.query.artist || req.query.singer || '').trim();
 

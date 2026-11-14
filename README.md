@@ -62,6 +62,7 @@
 | `PORT` | 服务监听端口（Alwaysdata 自动注入） | `8100` |
 | `IP` | 服务监听 IP（Alwaysdata 自动注入） | `::` |
 | `LX_SOURCE_URL` | 落雪音乐自定义音源服务地址（例如 `https://your-lx-source.com`） | *空（未启用）* |
+| `LX_SOURCE_KEY` | 请求落雪音源时的密钥（对应请求头 `X-Request-Key`，无则留空） | *空* |
 | `API_TOKEN` | 接口访问 Token。设置后客户端需在 Header 传 `X-API-Token` 或 Query 传 `?token=` | *空（公开）* |
 | `ALLOWED_ORIGIN` | 跨域允许来源域名 | `*` |
 | `QQ_COOKIE` | 个人 QQ 音乐账号 Cookie（若有 VIP 账号可填入，没有留空即可） | *空* |
