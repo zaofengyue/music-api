@@ -1,0 +1,18 @@
+{
+  "name": "alwaysdata-music-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QQ音乐解析音源接口 - 专为 Alwaysdata 与轻量部署设计",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "node src/app.js",
+    "build": "ncc build src/app.js -o dist -m"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.1"
+  }
+}
