@@ -1,0 +1,23 @@
+services:
+  music-api:
+    image: ghcr.io/zaofengyue/music-api:latest
+    build: .
+    container_name: music-api
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    environment:
+      - PORT=8100
+      - IP=0.0.0.0
+      - CACHE_TTL_SECONDS=1200
+      - RATE_LIMIT_MAX=60
+      # 可选：访问鉴权与跨域限制
+      # - API_TOKEN=your_secret_token
+      # - ALLOWED_ORIGIN=*
+      # 可选：第二梯队落雪音源配置
+      # - LX_SOURCE_URL=https://your-lx-source.com
+      # - LX_SOURCE_KEY=
+      # 可选：个人 VIP Cookie 配置
+      # - QQ_COOKIE=
+      # - QQ_UIN=0
+      # - NETEASE_COOKIE=os=pc; appver=2.9.7
